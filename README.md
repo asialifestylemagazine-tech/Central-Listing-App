@@ -1,4 +1,5 @@
-[asa-listing-manager.html](https://github.com/user-attachments/files/26562421/asa-listing-manager.html)[Uploading asa<!DOCTYPE html>
+[asa-listing-manager.html](https://github.com/user-attachments/files/26565763/asa-listing-manager.html)
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -204,7 +205,19 @@ textarea { resize: vertical; }
   font-size: 12px; font-weight: 500; display: none; z-index: 999;
   font-family: 'Helvetica Neue', sans-serif; letter-spacing: .02em; }
 
-/* Scrollbar */
+/* Wizard steps */
+.wiz-progress { display:flex; align-items:center; padding:16px 30px; border-bottom:1px solid var(--border); flex-shrink:0; gap:0; }
+.wiz-step { display:flex; align-items:center; gap:7px; }
+.wiz-dot { width:22px; height:22px; border-radius:50%; border:1px solid var(--border); background:transparent;
+  font-size:10px; font-family:'Helvetica Neue',sans-serif; color:var(--muted); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.wiz-dot.done { background:var(--gold); border-color:var(--gold); color:#1a1206; }
+.wiz-dot.active { border-color:var(--gold); color:var(--gold); }
+.wiz-label { font-size:10px; font-family:'Helvetica Neue',sans-serif; color:var(--muted); letter-spacing:.06em; white-space:nowrap; }
+.wiz-label.active { color:var(--gold); }
+.wiz-line { flex:1; height:1px; background:var(--border); margin:0 8px; min-width:8px; }
+.wiz-line.done { background:var(--gold); }
+.wiz-nav { display:flex; gap:10px; align-items:center; padding-top:24px; padding-bottom:40px; }
+
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
@@ -242,6 +255,7 @@ textarea { resize: vertical; }
   <!-- ── Main ── -->
   <main class="main">
     <div class="mhdr" id="mhdr"></div>
+    <div id="wiz-bar" style="display:none"></div>
     <div class="fcnt" id="fcnt"></div>
   </main>
 </div>
@@ -327,7 +341,18 @@ const S = {
   results: null,
   extracted: null,
   files: {},
-  webhooks: Object.fromEntries(COMMANDS.map(c => [c.id, ''])),
+  lpStep: 1,
+  lpWaiting: false, // true while waiting for post_id from n8n
+  webhooks: {
+    listing:         '',
+    listdevelopment: '',
+    updatelisting:   '',
+    deletelisting:   '',
+    viewlistings:    '',
+    drafts:          '',
+    uploadmedia:     '',
+    scanbrochure:    '',
+  },
 
   lp: { // List Property
     title:'', type:null, status:[], labels:[], areas:[],
@@ -336,6 +361,7 @@ const S = {
     address:'', lat:'', lng:'', description:'',
     features:[], note:'', agent:2461, videoUrl:'',
     platforms:[], driveLink:'',
+    post_id: null, // set after workflow 1 responds
   },
   ld: { // List Development
     devName:'', address:'', lat:'', lng:'', areas:[],
@@ -469,10 +495,70 @@ function filterFeats(q) {
    FORM RENDERERS
 ═══════════════════════════════════════════════════════ */
 
-// ── List Property ──────────────────────────────────────
+// ── List Property — Wizard ─────────────────────────────
+const LP_STEPS = [
+  {n:1,label:'Platforms'},
+  {n:2,label:'Listing info'},
+  {n:3,label:'Features'},
+  {n:4,label:'Description'},
+  {n:5,label:'Cover image'},
+  {n:6,label:'Gallery'},
+  {n:7,label:'Floor plans'},
+];
+
+function wizProgress() {
+  const cur = S.lpStep;
+  let h = `<div class="wiz-progress">`;
+  LP_STEPS.forEach((s,i) => {
+    const done=cur>s.n, active=cur===s.n;
+    h += `<div class="wiz-step">
+      <div class="wiz-dot${done?' done':active?' active':''}">${done?'✓':s.n}</div>
+      <div class="wiz-label${active?' active':''}">${s.label}</div>
+    </div>`;
+    if (i < LP_STEPS.length-1) h += `<div class="wiz-line${done?' done':''}"></div>`;
+  });
+  return h + `</div>`;
+}
+
+function wizNav(nextLabel='Next →', showSubmit=false) {
+  return `<div class="wiz-nav">
+    ${S.lpStep > 1 ? `<button class="btn btn-outline" onclick="lpPrev()">← Back</button>` : ''}
+    ${showSubmit
+      ? `<button class="btn btn-gold" onclick="submitLP()">Submit listing →</button>`
+      : `<button class="btn btn-gold" onclick="lpNext()">${nextLabel}</button>`}
+    <button class="btn btn-outline" onclick="saveDraft()">Save draft</button>
+    ${S.lp.post_id ? `<span style="font-size:11px;color:var(--gold);margin-left:8px">Draft ID: ${S.lp.post_id}</span>` : ''}
+  </div>`;
+}
+
 function renderLP() {
-  return [
-    SEC('Basic info',
+  const step = S.lpStep;
+
+  // Waiting page — shown while n8n processes and returns post_id
+  if (S.lpWaiting) return `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center;gap:20px">
+      <div style="width:40px;height:40px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+      <div style="color:var(--text);font-size:15px;letter-spacing:.02em">Submitting listing…</div>
+      <div style="color:var(--muted);font-size:12px;font-family:'Helvetica Neue',sans-serif;max-width:280px;line-height:1.7">
+        Uploading images and creating your listing. This may take a moment depending on image sizes.
+      </div>
+    </div>
+    <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+  `;
+
+  if (step === 1) return [
+    SEC('Where to list',
+      `<div class="info">Select all platforms you want this property to appear on.</div>`,
+      F('Platforms', PILLS('lp','platforms',PLATFORMS,true), true),
+      F('Google Drive link (optional)', URL_('lp','driveLink','https://drive.google.com/...')),
+      G2(F('Internal note', TXT('lp','note','e.g. Annara 5bed 8% com unit A1')),
+         F('Agent', PILLS('lp','agent',AGENTS,false))),
+    ),
+    wizNav('Next →'),
+  ].join('');
+
+  if (step === 2) return [
+    SEC('Property info',
       F('Property title', TXT('lp','title','e.g. 5 bedroom pool villa in Cherngtalay'), true),
       G2(F('Property type', PILLS('lp','type',TYPES,false), true),
          F('Status', PILLS('lp','status',STATUSES,true), true)),
@@ -494,32 +580,82 @@ function renderLP() {
       F('Full address', TXT('lp','address','Soi Pasak 8, Cherngtalay, Thalang District, Phuket 83110')),
       G2(F('Latitude', TXT('lp','lat','e.g. 7.9974'), true),
          F('Longitude', TXT('lp','lng','e.g. 98.3205'), true)),
-    ),
-    SEC('Description',
-      F('Property description', TA('lp','description',5,'Full listing description for the website…')),
-    ),
-    FEATS('lp','features'),
-    SEC('Internal',
-      G2(F('Internal note', TXT('lp','note','e.g. Annara 5bed 8% com unit A1')),
-         F('Agent', PILLS('lp','agent',AGENTS,false))),
       F('Video URL (YouTube)', URL_('lp','videoUrl','https://www.youtube.com/watch?v=...')),
     ),
-    SEC('Platforms',
-      F('Post to', PILLS('lp','platforms',PLATFORMS,true), true),
-      F('Google Drive link', URL_('lp','driveLink','https://drive.google.com/...')),
+    wizNav(),
+  ].join('');
+
+  if (step === 3) return [
+    FEATS('lp','features'),
+    wizNav(),
+  ].join('');
+
+  if (step === 4) return [
+    SEC('Description',
+      `<div class="info">Write the property description. Upload a PDF sales kit below and the AI in n8n will extract pricing, payment plans and incentives automatically.</div>`,
+      F('Property description', TA('lp','description',8,'Full listing description…')),
     ),
-    SEC('Media',
-      F('Featured image', FZONE('lp-feat','Upload featured image (JPG / PNG)',false,'image/*'), true),
-      F('Gallery images (up to 10)', FZONE('lp-gal','Upload gallery images',true,'image/*')),
-      F('Floor plans', FZONE('lp-plans','Upload floor plan images or PDFs',true,'image/*,.pdf')),
+    SEC('PDF sales kit (optional)',
       F('PDF documents', FZONE('lp-pdfs','Upload brochures, price lists, legal docs',true,'.pdf')),
     ),
-    `<div class="btn-row">
-      <button class="btn btn-gold" onclick="submitLP()">Submit listing →</button>
-      <button class="btn btn-outline" onclick="saveDraft()">Save draft</button>
-    </div>`,
+    wizNav('Next →'),
   ].join('');
+
+  if (step === 5) return [
+    SEC('Cover image',
+      `<div class="info">This is the main image shown on search results. One high quality JPG or PNG.</div>`,
+      F('Featured image', FZONE('lp-feat','Upload featured image (JPG / PNG)',false,'image/*'), true),
+    ),
+    wizNav(),
+  ].join('');
+
+  if (step === 6) return [
+    SEC('Gallery images',
+      `<div class="info">Up to 10 images for the gallery slider on the listing page.</div>`,
+      F('Gallery images', FZONE('lp-gal','Upload up to 10 gallery images',true,'image/*')),
+    ),
+    wizNav(),
+  ].join('');
+
+  if (step === 7) return [
+    SEC('Floor plans',
+      `<div class="info">Floor plan images or PDFs. Optional — skip if not available.</div>`,
+      F('Floor plans', FZONE('lp-plans','Upload floor plan images or PDFs (optional)',true,'image/*,.pdf')),
+    ),
+    SEC('Review',
+      `<div class="info">
+        <strong>${S.lp.title||'Untitled'}</strong><br>
+        ${TYPES.find(t=>t.id===S.lp.type)?.l||'—'} &nbsp;·&nbsp;
+        ${S.lp.beds||'—'} bed &nbsp;·&nbsp; ${S.lp.baths||'—'} bath &nbsp;·&nbsp;
+        ${S.lp.size||'—'} sqm &nbsp;·&nbsp; ฿${Number(S.lp.price||0).toLocaleString()}<br>
+        Platforms: ${S.lp.platforms.join(', ')||'none'}<br>
+        Draft post ID: ${S.lp.post_id||'not created yet'}<br>
+        Featured image: ${(S.files['lp-feat']||[]).length?'✓ ready':'✗ not uploaded'}<br>
+        Gallery: ${(S.files['lp-gal']||[]).length} images &nbsp;·&nbsp;
+        Floor plans: ${(S.files['lp-plans']||[]).length} files
+      </div>`,
+    ),
+    wizNav('', true),
+  ].join('');
+
+  return '';
 }
+
+async function lpNext() {
+  if (S.lpStep === 1 && !S.lp.platforms.length) { toast('Select at least one platform', true); return; }
+  if (S.lpStep === 2) {
+    if (!S.lp.title)         { toast('Property title is required', true); return; }
+    if (!S.lp.type)          { toast('Property type is required', true); return; }
+    if (!S.lp.status.length) { toast('Status is required', true); return; }
+  }
+  if (S.lpStep === 5 && !(S.files['lp-feat']||[]).length) { toast('Featured image is required', true); return; }
+  if (S.lpStep < 7) { S.lpStep++; render(); document.getElementById('fcnt').scrollTop = 0; }
+}
+
+function lpPrev() {
+  if (S.lpStep > 1) { S.lpStep--; render(); document.getElementById('fcnt').scrollTop = 0; }
+}
+
 
 // ── List Development ───────────────────────────────────
 function renderLD() {
@@ -720,6 +856,9 @@ function renderSettings() {
       <button class="btn btn-outline" onclick="go(S.cmd)">← Back</button>
     </div>`,
     `<div class="settings-note">In n8n, create an <strong>HTTP Webhook trigger</strong> node for each command. Copy the production URL and paste it below. Each form submission will POST all field data as JSON to that URL.</div>`,
+    F(`/listing — list property (text + images)`,
+      `<input type="text" data-wh="listing" value="${esc(S.webhooks['listing']||'')}" placeholder="https://your-n8n.com/webhook/listing">`
+    ),
     ...COMMANDS.map(c => F(`/${c.id} — ${c.desc}`,
       `<input type="text" data-wh="${c.id}" value="${esc(S.webhooks[c.id]||'')}" placeholder="https://your-n8n.com/webhook/${c.id}">`
     )),
@@ -763,6 +902,16 @@ function render() {
       <div class="dsc">${cur.desc}</div>`;
   }
 
+  // Wizard progress bar for listproperty
+  const prog = document.getElementById('wiz-bar');
+  if (S.cmd === 'listproperty' && !S.settings) {
+    prog.innerHTML = wizProgress();
+    prog.style.display = 'block';
+  } else {
+    prog.innerHTML = '';
+    prog.style.display = 'none';
+  }
+
   // Form content
   document.getElementById('fcnt').innerHTML = S.settings ? renderSettings() : RENDERERS[S.cmd]();
 }
@@ -776,7 +925,10 @@ function go(cmd) {
 function goSettings() { S.settings = true; render(); }
 
 function saveSettings() {
-  document.querySelectorAll('[data-wh]').forEach(el => { S.webhooks[el.dataset.wh] = el.value.trim(); });
+  document.querySelectorAll('[data-wh]').forEach(el => {
+    S.webhooks[el.dataset.wh] = el.value.trim();
+  });
+  localStorage.setItem('am_webhooks', JSON.stringify(S.webhooks));
   toast('Settings saved');
   go(S.cmd);
 }
@@ -967,21 +1119,61 @@ async function post(cmd, payload) {
 /* ═══════════════════════════════════════════════════════
    SUBMIT HANDLERS
 ═══════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════
+   SUBMIT HANDLERS
+═══════════════════════════════════════════════════════ */
+
+// Single submission — all text + all images in one FormData POST
 async function submitLP() {
   const d = S.lp;
   if (!d.title || !d.type || !d.status.length || !d.platforms.length) {
-    toast('Title, type, status and at least one platform are required', true); return;
+    toast('Title, type, status and platform are required', true); return;
   }
-  try {
-    const payload = {
-      ...d,
-      featuredImage: await readFilesB64(S.files['lp-feat']),
-      gallery:       await readFilesB64(S.files['lp-gal']),
-      floorPlans:    await readFilesB64(S.files['lp-plans']),
-      pdfs:          await readFilesB64(S.files['lp-pdfs']),
-    };
-    if (await post('listproperty', payload)) toast('Listing submitted successfully');
-  } catch(e) { toast('Error: ' + e.message, true); }
+  const url = S.webhooks['listing'];
+  if (!url) { toast('No webhook set — go to Settings', true); return; }
+
+  // Show spinner
+  S.lpWaiting = true; render();
+
+  setTimeout(async () => {
+    try {
+      const form = new FormData();
+
+      // All text fields as JSON
+      form.append('data', JSON.stringify(d));
+
+      // Images as binary — no base64, no memory crash
+      const feat  = S.files['lp-feat']  || [];
+      const gal   = S.files['lp-gal']   || [];
+      const plans = S.files['lp-plans'] || [];
+      const pdfs  = S.files['lp-pdfs']  || [];
+
+      if (feat[0]) form.append('featuredImage', feat[0]);
+      gal.slice(0,10).forEach((f,i)  => form.append(`gallery_${i}`,   f));
+      plans.slice(0,5).forEach((f,i) => form.append(`floorPlan_${i}`, f));
+      pdfs.slice(0,5).forEach((f,i)  => form.append(`pdf_${i}`,       f));
+
+      const r = await fetch(url, { method:'POST', body: form });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+
+      toast('Listing submitted successfully!');
+
+      // Reset
+      S.lp = { title:'', type:null, status:[], labels:[], areas:[], beds:null, baths:null,
+        size:'', land:'', price:'', pricePrefix:'', rooms:'', year:'', propertyId:'',
+        address:'', lat:'', lng:'', description:'', features:[], note:'', agent:2461,
+        videoUrl:'', platforms:[], driveLink:'', post_id:null };
+      S.files = {};
+      S.lpStep = 1;
+      S.lpWaiting = false;
+      render();
+
+    } catch(e) {
+      S.lpWaiting = false; S.lpStep = 7; render();
+      toast('Error: ' + e.message, true);
+    }
+  }, 50);
 }
 
 async function submitLD() {
@@ -1075,7 +1267,7 @@ function checkPw() {
   const input = document.getElementById('gate-input');
   const err   = document.getElementById('gate-err');
   if (input.value === PASSWORD) {
-    sessionStorage.setItem('am_auth','1');
+    localStorage.setItem('am_auth','1');
     document.getElementById('gate').classList.add('hidden');
     render();
   } else {
@@ -1089,7 +1281,13 @@ function checkPw() {
 /* ═══════════════════════════════════════════════════════
    INIT
 ═══════════════════════════════════════════════════════ */
-if (sessionStorage.getItem('am_auth') === '1') {
+// Load saved webhooks from localStorage
+try {
+  const saved = JSON.parse(localStorage.getItem('am_webhooks')||'{}');
+  Object.assign(S.webhooks, saved);
+} catch(e) {}
+
+if (localStorage.getItem('am_auth') === '1') {
   document.getElementById('gate').classList.add('hidden');
   render();
 } else {
@@ -1098,4 +1296,3 @@ if (sessionStorage.getItem('am_auth') === '1') {
 </script>
 </body>
 </html>
--listing-manager.html…]()
