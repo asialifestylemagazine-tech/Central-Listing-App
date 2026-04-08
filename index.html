@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASA Marsh — Listing Manager</title>
+<style>
+/* ═══════════════════════════════════════════════
+   THEME — change colours here
+═══════════════════════════════════════════════ */
+:root {
+  --gold:      #C9A96E;
+  --gold-bg:   rgba(201,169,110,0.08);
+  --bg:        #080808;
+  --sb:        #0d0d0d;
+  --card:      #141414;
+  --border:    #1e1e1e;
+  --bh:        #303030;
+  --text:      #f0ede8;
+  --sub:       #808078;
+  --muted:     #454540;
+  --inp:       #0b0b0b;
+  --danger:    #e05555;
+  --dbg:       rgba(224,85,85,0.07);
+  --success:   #5eb47a;
+}
+
+/* ═══════════════════════════════════════════════
+   BASE
+═══════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+  font-family: 'Georgia', 'Times New Roman', serif; font-size: 13px; -webkit-font-smoothing: antialiased; }
+button { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+input, textarea, select { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+strong { font-weight: 600; }
+
+/* ═══════════════════════════════════════════════
+   LAYOUT
+═══════════════════════════════════════════════ */
+.app  { display: flex; height: 100vh; }
+.sb   { width: 215px; flex-shrink: 0; background: var(--sb); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ═══════════════════════════════════════════════
+   SIDEBAR
+═══════════════════════════════════════════════ */
+.sb-logo { padding: 24px 18px 20px; border-bottom: 1px solid var(--border); }
+.sb-logo .name { font-size: 15px; font-weight: normal; letter-spacing: .1em; margin-bottom: 4px; }
+.sb-logo .tag  { font-size: 9px; letter-spacing: .2em; color: var(--muted); text-transform: uppercase; font-family: 'Helvetica Neue', sans-serif; }
+.sb-nav  { flex: 1; overflow-y: auto; padding: 8px 0; }
+.sb-foot { border-top: 1px solid var(--border); padding: 6px 0; }
+
+.nbtn { width: 100%; padding: 9px 18px; background: transparent; border: none;
+  border-left: 2px solid transparent; cursor: pointer; text-align: left;
+  color: var(--text); transition: background .12s; display: block; }
+.nbtn:hover { background: rgba(255,255,255,.025); }
+.nbtn.on  { background: var(--gold-bg); border-left-color: var(--gold); }
+.nbtn .nl { font-size: 12px; margin-bottom: 2px; font-family: 'Helvetica Neue', sans-serif; transition: color .12s; }
+.nbtn.on .nl { color: var(--gold); font-weight: 500; }
+.nbtn .nd { font-size: 10px; color: var(--muted); font-family: 'Helvetica Neue', sans-serif; }
+
+/* ═══════════════════════════════════════════════
+   MAIN HEADER
+═══════════════════════════════════════════════ */
+.mhdr { padding: 20px 30px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.mhdr .cmd  { font-size: 10px; letter-spacing: .15em; color: var(--gold); text-transform: uppercase;
+  font-weight: 600; margin-bottom: 4px; font-family: 'Helvetica Neue', sans-serif; }
+.mhdr .ttl  { font-size: 20px; font-weight: normal; letter-spacing: .02em; margin-bottom: 2px; }
+.mhdr .dsc  { font-size: 11px; color: var(--muted); font-family: 'Helvetica Neue', sans-serif; }
+
+/* ═══════════════════════════════════════════════
+   FORM AREA
+═══════════════════════════════════════════════ */
+.fcnt { flex: 1; overflow-y: auto; padding: 26px 30px 80px; }
+
+/* ═══════════════════════════════════════════════
+   FORM COMPONENTS
+═══════════════════════════════════════════════ */
+.sec { margin-bottom: 30px; }
+.stitle { font-size: 10px; letter-spacing: .18em; color: var(--gold); text-transform: uppercase;
+  font-weight: 600; margin-bottom: 16px; padding-bottom: 9px;
+  border-bottom: 1px solid var(--border); font-family: 'Helvetica Neue', sans-serif; }
+
+.fld { margin-bottom: 14px; }
+.flbl { font-size: 10px; letter-spacing: .1em; color: var(--sub); text-transform: uppercase;
+  font-weight: 500; margin-bottom: 7px; font-family: 'Helvetica Neue', sans-serif; }
+.flbl .req { color: var(--gold); margin-left: 2px; }
+
+.g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+
+/* Inputs */
+input[type=text], input[type=number], input[type=url], textarea, select {
+  width: 100%; background: var(--inp); border: 1px solid var(--border); border-radius: 2px;
+  padding: 9px 12px; color: var(--text); font-size: 13px; outline: none;
+  transition: border-color .15s; }
+input:focus, textarea:focus { border-color: var(--bh); }
+textarea { resize: vertical; }
+::placeholder { color: var(--muted); }
+.w160 { max-width: 160px !important; }
+.w200 { max-width: 200px !important; }
+
+/* Pills */
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill  { padding: 5px 11px; border-radius: 2px; font-size: 11px; cursor: pointer;
+  border: 1px solid var(--border); background: transparent; color: var(--sub);
+  transition: all .12s; font-family: 'Helvetica Neue', sans-serif; }
+.pill:hover { border-color: var(--bh); color: var(--text); }
+.pill.on    { border-color: var(--gold); background: var(--gold-bg); color: var(--gold); }
+
+/* Feature search */
+.feat-search { margin-bottom: 16px; }
+.feat-search input { max-width: 300px; }
+.feat-cat { margin-bottom: 18px; }
+.feat-cat-lbl { font-size: 9px; letter-spacing: .14em; color: var(--muted); text-transform: uppercase;
+  font-weight: 600; margin-bottom: 8px; font-family: 'Helvetica Neue', sans-serif; }
+.pill.hidden { display: none !important; }
+
+/* File zones */
+.fzone { border: 1px dashed var(--border); border-radius: 2px; padding: 12px 15px;
+  cursor: pointer; background: var(--inp); display: flex; align-items: center; gap: 8px;
+  transition: border-color .15s; }
+.fzone:hover { border-color: var(--bh); }
+.fzone.ok    { border-color: var(--gold); }
+.fzone-txt   { font-size: 12px; color: var(--muted); font-family: 'Helvetica Neue', sans-serif; }
+.fzone.ok .fzone-txt { color: var(--gold); }
+
+/* Info / warn boxes */
+.info { padding: 11px 14px; background: rgba(201,169,110,.06); border: 1px solid rgba(201,169,110,.18);
+  border-radius: 2px; margin-bottom: 18px; font-size: 12px; color: var(--sub);
+  line-height: 1.65; font-family: 'Helvetica Neue', sans-serif; }
+.warn { padding: 11px 14px; background: var(--dbg); border: 1px solid rgba(224,85,85,.2);
+  border-radius: 2px; margin-bottom: 18px; font-size: 12px; color: var(--danger);
+  line-height: 1.65; font-family: 'Helvetica Neue', sans-serif; }
+
+/* Buttons */
+.btn { padding: 9px 22px; border-radius: 2px; font-size: 12px; font-weight: 500;
+  cursor: pointer; transition: opacity .15s; border: none; letter-spacing: .04em; }
+.btn:disabled { opacity: .5; cursor: wait; }
+.btn-gold    { background: var(--gold); color: #1a1206; }
+.btn-gold:hover { opacity: .88; }
+.btn-danger  { background: var(--dbg); color: var(--danger); border: 1px solid rgba(224,85,85,.25); }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--sub); }
+.btn-outline:hover { border-color: var(--bh); color: var(--text); }
+.btn-row { display: flex; gap: 10px; align-items: center; margin-top: 8px; margin-bottom: 40px; }
+
+/* Unit cards */
+.ucard { border: 1px solid var(--border); border-radius: 3px; padding: 15px; margin-bottom: 10px; background: var(--card); }
+.ucard-hdr { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.ucard-lbl { font-size: 10px; letter-spacing: .12em; color: var(--gold); text-transform: uppercase;
+  font-weight: 600; font-family: 'Helvetica Neue', sans-serif; }
+.ucard-rm  { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 18px; line-height: 1; padding: 0; }
+.add-unit  { width: 100%; padding: 10px; border: 1px dashed var(--border); background: transparent;
+  color: var(--sub); font-size: 12px; cursor: pointer; border-radius: 2px; margin-top: 4px;
+  transition: all .12s; }
+.add-unit:hover { border-color: var(--gold); color: var(--gold); }
+
+/* Results */
+.ritem { border: 1px solid var(--border); border-radius: 2px; padding: 10px 13px;
+  margin-bottom: 7px; background: var(--card); display: flex; justify-content: space-between; align-items: center; }
+.ritem-ttl  { font-size: 13px; margin-bottom: 2px; }
+.ritem-meta { font-size: 11px; color: var(--muted); font-family: 'Helvetica Neue', sans-serif; }
+.ritem a    { color: var(--gold); font-size: 11px; text-decoration: none; font-family: 'Helvetica Neue', sans-serif; }
+
+/* Extracted units */
+.eu      { border: 1px solid var(--border); border-radius: 2px; padding: 12px; margin-bottom: 8px; background: var(--card); }
+.eu-name { font-size: 13px; margin-bottom: 4px; }
+.eu-meta { font-size: 11px; color: var(--muted); font-family: 'Helvetica Neue', sans-serif; }
+.eu-btns { margin-top: 9px; display: flex; gap: 7px; }
+.eu-confirm { padding: 4px 11px; background: var(--gold-bg); border: 1px solid var(--gold); color: var(--gold); border-radius: 2px; font-size: 11px; cursor: pointer; }
+.eu-edit    { padding: 4px 11px; background: transparent; border: 1px solid var(--border); color: var(--sub); border-radius: 2px; font-size: 11px; cursor: pointer; }
+
+/* Settings */
+.settings-note { padding: 12px 14px; background: var(--card); border: 1px solid var(--border);
+  border-radius: 2px; margin-bottom: 22px; font-size: 12px; color: var(--sub);
+  line-height: 1.7; font-family: 'Helvetica Neue', sans-serif; }
+.settings-hdr { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 22px; }
+
+/* Toast */
+#toast { position: fixed; bottom: 20px; right: 20px; padding: 10px 18px; border-radius: 2px;
+  font-size: 12px; font-weight: 500; display: none; z-index: 999;
+  font-family: 'Helvetica Neue', sans-serif; letter-spacing: .02em; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- ── Password Screen ── -->
+<div id="pw-screen" style="
+  position:fixed; inset:0; z-index:9999; background:var(--bg);
+  display:flex; align-items:center; justify-content:center; flex-direction:column;
+">
+  <div style="text-align:center; max-width:320px; width:100%; padding:0 20px;">
+    <div style="font-size:15px; letter-spacing:.1em; margin-bottom:4px; color:var(--text);">ASA MARSH</div>
+    <div style="font-size:9px; letter-spacing:.2em; color:var(--muted); text-transform:uppercase; font-family:'Helvetica Neue',sans-serif; margin-bottom:40px;">Listing Manager</div>
+    <input id="pw-input" type="password" placeholder="Enter password" autofocus
+      style="
+        width:100%; padding:10px 14px; background:var(--inp); border:1px solid var(--border);
+        border-radius:6px; color:var(--text); font-size:14px; font-family:'Helvetica Neue',sans-serif;
+        outline:none; margin-bottom:12px;
+      "
+      onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='var(--border)'"
+    />
+    <button id="pw-btn" onclick="checkPassword()"
+      style="
+        width:100%; padding:10px 0; background:var(--gold); color:#000; border:none;
+        border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;
+        font-family:'Helvetica Neue',sans-serif; letter-spacing:.04em;
+      "
+    >Unlock</button>
+    <div id="pw-error" style="color:var(--danger); font-size:12px; margin-top:12px; font-family:'Helvetica Neue',sans-serif; display:none;">
+      Incorrect password
+    </div>
+  </div>
+</div>
+
+<div class="app" style="display:none;" id="app-root">
+  <!-- ── Sidebar ── -->
+  <aside class="sb">
+    <div class="sb-logo">
+      <div class="name">ASA MARSH</div>
+      <div class="tag">Listing Manager</div>
+    </div>
+    <nav class="sb-nav" id="sb-nav"></nav>
+    <div class="sb-foot">
+      <button class="nbtn" id="settings-btn" onclick="goSettings()">
+        <div class="nl">⚙ Settings</div>
+        <div class="nd">Webhook configuration</div>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ── Main ── -->
+  <main class="main">
+    <div class="mhdr" id="mhdr"></div>
+    <div class="fcnt" id="fcnt"></div>
+  </main>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════
+   DATA — Edit options here to update dropdowns
+═══════════════════════════════════════════════════════ */
+const COMMANDS = [
+  { id:'listproperty',    label:'List property',    desc:'New single listing'        },
+  { id:'listdevelopment', label:'List development', desc:'Multi-unit project'        },
+  { id:'updatelisting',   label:'Update listing',   desc:'Edit existing by ID'       },
+  { id:'deletelisting',   label:'Delete listing',   desc:'Remove from platforms'     },
+  { id:'viewlistings',    label:'View listings',    desc:'Browse live listings'      },
+  { id:'drafts',          label:'Drafts',           desc:'Resume unfinished'         },
+  { id:'uploadmedia',     label:'Upload media',     desc:'Add to existing listing'   },
+  { id:'scanbrochure',    label:'Scan brochure',    desc:'Extract units via AI'      },
+];
+
+const TYPES    = [{id:55,l:'Villa'},{id:19,l:'Condo'},{id:27,l:'Land'},{id:52,l:'Townhouse'},{id:14,l:'Apartment'},{id:81,l:'Penthouse'},{id:82,l:'Commercial'}];
+const STATUSES = [{id:24,l:'For sale'},{id:85,l:'Under construction'},{id:48,l:'Resale'},{id:84,l:'Off plan'},{id:38,l:'Completed'}];
+const LABELS   = [{id:146,l:'Luxury'},{id:147,l:'Investment'},{id:148,l:'Hot deal'},{id:145,l:'Featured'}];
+const AREAS    = [{id:62,l:'Bang Tao'},{id:63,l:'Cherngtalay'},{id:64,l:'Laguna'},{id:65,l:'Layan'},{id:74,l:'Cape Yamu'},{id:168,l:'Cape Panwa'},{id:78,l:'Koh Kaew'},{id:170,l:'Central Phuket'}];
+const PLATFORMS= [{id:'asamarsh',l:'ASA Marsh'},{id:'elp',l:'ELP'},{id:'alm',l:'ALM'},{id:'est8y',l:'EST8Y'},{id:'est8tnow',l:'EST8TNOW'}];
+const AGENTS   = [{id:2461,l:'Asa Marsh'}]; // add more agents here
+const BEDS     = ['Studio','1','2','3','4','5','6','7','8+'];
+const BATHS    = ['1','2','3','4','5','6','7','8+'];
+
+const FEATURES = {
+  'Property features': [
+    {id:13,l:'Air conditioning'},{id:15,l:'Barbeque'},{id:95,l:'Covered parking'},
+    {id:96,l:'EV charger'},{id:91,l:'Fully furnished'},{id:86,l:'Garden'},
+    {id:26,l:'Gym'},{id:172,l:'Kitchen'},{id:28,l:'Laundry'},{id:88,l:'Outdoor sala'},
+    {id:43,l:'Outdoor shower'},{id:94,l:'Parking'},{id:51,l:'Private pool'},
+    {id:47,l:'Refrigerator'},{id:57,l:'WiFi'},
+  ],
+  'Common area': [
+    {id:127,l:'24hr security'},{id:119,l:'Basketball court'},{id:123,l:'Cafe'},
+    {id:129,l:'CCTV security'},{id:121,l:'Co-working space'},{id:114,l:'Common pool'},
+    {id:171,l:'Elevator'},{id:115,l:'Fitness center'},{id:128,l:'Key card access'},
+    {id:120,l:'Kids playground'},{id:126,l:'Reception'},{id:122,l:'Restaurant'},
+    {id:116,l:'Sauna'},{id:125,l:'Shuttle service'},{id:124,l:'Spa'},
+    {id:117,l:'Steam room'},{id:118,l:'Tennis court'},
+  ],
+  'Views': [
+    {id:100,l:'Garden view'},{id:102,l:'Golf course view'},{id:103,l:'Lake view'},
+    {id:99,l:'Mountain view'},{id:98,l:'Partial sea view'},{id:101,l:'Pool view'},{id:97,l:'Sea view'},
+  ],
+  'Location': [
+    {id:132,l:'Beachfront'},{id:136,l:'Near Boat Avenue'},{id:134,l:'Near golf course'},
+    {id:133,l:"Near int'l school"},{id:137,l:'Near Laguna Phuket'},{id:135,l:'Near marina'},
+    {id:138,l:'Near airport'},{id:131,l:'Walk to beach'},
+  ],
+  'Ownership': [
+    {id:111,l:'Chanote title'},{id:110,l:'Company ownership'},{id:107,l:'Foreign freehold'},
+    {id:109,l:'Leasehold'},{id:112,l:'Nor Sor 3 Gor'},{id:108,l:'Thai freehold'},
+  ],
+  'Infrastructure': [
+    {id:142,l:'Backup generator'},{id:143,l:'Deep well water'},{id:144,l:'Government water'},
+    {id:140,l:'High speed internet'},{id:141,l:'Solar power'},
+  ],
+};
+
+/* ═══════════════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════════════ */
+function blankUnit() {
+  return { name:'', type:null, status:[], labels:[], beds:null, baths:null, size:'', land:'', price:'', pricePrefix:'' };
+}
+
+const S = {
+  cmd: 'listproperty',
+  settings: false,
+  loading: false,
+  results: null,
+  extracted: null,
+  files: {},
+  webhooks: Object.fromEntries(COMMANDS.map(c => [c.id, ''])),
+
+  lp: { // List Property
+    title:'', type:null, status:[], labels:[], areas:[],
+    beds:null, baths:null, size:'', land:'', price:'', pricePrefix:'',
+    rooms:'', year:'', propertyId:'',
+    address:'', lat:'', lng:'', description:'',
+    features:[], note:'', agent:2461, videoUrl:'',
+    platforms:[], driveLink:'',
+  },
+  ld: { // List Development
+    devName:'', address:'', lat:'', lng:'', areas:[],
+    description:'', features:[], note:'', agent:2461,
+    platforms:[], driveLink:'',
+    units: [blankUnit()],
+  },
+  ul: { postId:'', platforms:[], fields:{ title:'', price:'', status:[], description:'', note:'' } },
+  dl: { postId:'', platforms:[] },
+  vl: { type:null, status:[], areas:[], beds:null },
+  um: { postId:'', mediaType:'gallery', platform:'asamarsh' },
+  sb: { platforms:[], note:'', driveLink:'' },
+};
+
+/* ═══════════════════════════════════════════════════════
+   TEMPLATE HELPERS
+═══════════════════════════════════════════════════════ */
+const esc = v => String(v||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+// Get value from state by dot-path
+function gv(fp, fk) {
+  const obj = fp.split('.').reduce((o,k) => o&&o[k]!==undefined?o[k]:null, S);
+  return obj && obj[fk] !== undefined ? obj[fk] : '';
+}
+
+// Set value in state by dot-path
+function sv(fp, fk, val) {
+  const obj = fp.split('.').reduce((o,k) => o&&o[k]!==undefined?o[k]:null, S);
+  if (obj) obj[fk] = val;
+}
+
+// Field wrapper
+function F(label, content, req=false, style='') {
+  return `<div class="fld"${style?` style="${style}"`:''}>
+    <div class="flbl">${label}${req?'<span class="req">*</span>':''}</div>
+    ${content}
+  </div>`;
+}
+
+// Section wrapper
+function SEC(title, ...items) {
+  return `<div class="sec"><div class="stitle">${title}</div>${items.join('')}</div>`;
+}
+
+// Grid helpers
+function G2(...items) { return `<div class="g2">${items.join('')}</div>`; }
+function G3(...items) { return `<div class="g3">${items.join('')}</div>`; }
+
+// Text input
+function TXT(fp, fk, placeholder='', cls='') {
+  return `<input type="text" data-fp="${fp}" data-fk="${fk}" value="${esc(gv(fp,fk))}" placeholder="${placeholder}"${cls?` class="${cls}"`:''}>`;
+}
+
+// Number input
+function NUM(fp, fk, placeholder='', cls='') {
+  return `<input type="number" data-fp="${fp}" data-fk="${fk}" value="${esc(gv(fp,fk))}" placeholder="${placeholder}"${cls?` class="${cls}"`:''}>`;
+}
+
+// URL input
+function URL_(fp, fk, placeholder='') {
+  return `<input type="url" data-fp="${fp}" data-fk="${fk}" value="${esc(gv(fp,fk))}" placeholder="${placeholder}">`;
+}
+
+// Textarea
+function TA(fp, fk, rows=4, placeholder='') {
+  return `<textarea data-fp="${fp}" data-fk="${fk}" rows="${rows}" placeholder="${placeholder}">${esc(gv(fp,fk))}</textarea>`;
+}
+
+// Pills (single or multi select)
+function PILLS(fp, fk, opts, multi=false) {
+  const obj = fp.split('.').reduce((o,k) => o&&o[k]!==undefined?o[k]:null, S);
+  const val = obj ? obj[fk] : (multi?[]:'');
+  const isOn = id => multi ? (Array.isArray(val)&&val.includes(id)) : val===id;
+  return `<div class="pills" data-fp="${fp}" data-fk="${fk}" data-multi="${multi}">
+    ${opts.map(o => `<button class="pill${isOn(o.id)?' on':''}" data-val="${o.id}">${o.l}</button>`).join('')}
+  </div>`;
+}
+
+// Number pills (beds/baths)
+function NPILLS(fp, fk, opts) {
+  const obj = fp.split('.').reduce((o,k) => o&&o[k]!==undefined?o[k]:null, S);
+  const val = obj ? obj[fk] : null;
+  return `<div class="pills" data-fp="${fp}" data-fk="${fk}" data-multi="false">
+    ${opts.map(v => `<button class="pill${val===v?' on':''}" data-val="${v}">${v}</button>`).join('')}
+  </div>`;
+}
+
+// File zone
+function FZONE(id, label, multiple=false, accept='*') {
+  const files = S.files[id] || [];
+  const ok = files.length > 0;
+  const txt = ok ? `${files.length} file${files.length>1?'s':''} — ${files.map(f=>f.name).join(', ')}` : `↑  ${label}`;
+  return `<div class="fzone${ok?' ok':''}" data-fz="${id}" onclick="trigFile('${id}')">
+    <input type="file" id="fi-${id}"${multiple?' multiple':''} accept="${accept}" style="display:none" onchange="onFiles('${id}',this.files)">
+    <span class="fzone-txt">${txt}</span>
+  </div>`;
+}
+
+// Feature section with search
+function FEATS(fp, fk) {
+  const obj = fp.split('.').reduce((o,k) => o&&o[k]!==undefined?o[k]:null, S);
+  const sel = obj ? (obj[fk]||[]) : [];
+  let h = `<div class="sec"><div class="stitle">Features</div>
+    <div class="feat-search fld">
+      <div class="flbl">Search features</div>
+      <input type="text" placeholder="Type to filter…" oninput="filterFeats(this.value)" style="max-width:280px">
+    </div>
+    <div id="feat-cats">`;
+  for (const [cat, feats] of Object.entries(FEATURES)) {
+    h += `<div class="feat-cat" data-cat="${cat}">
+      <div class="feat-cat-lbl">${cat}</div>
+      <div class="pills" data-fp="${fp}" data-fk="${fk}" data-multi="true">
+        ${feats.map(f => `<button class="pill${sel.includes(f.id)?' on':''}" data-val="${f.id}" data-label="${f.l.toLowerCase()}">${f.l}</button>`).join('')}
+      </div></div>`;
+  }
+  h += `</div></div>`;
+  return h;
+}
+
+function filterFeats(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('#feat-cats .pill').forEach(btn => {
+    btn.classList.toggle('hidden', !!q && !btn.dataset.label.includes(q));
+  });
+  document.querySelectorAll('.feat-cat').forEach(cat => {
+    cat.style.display = cat.querySelectorAll('.pill:not(.hidden)').length ? '' : 'none';
+  });
+}
+
+/* ═══════════════════════════════════════════════════════
+   FORM RENDERERS
+═══════════════════════════════════════════════════════ */
+
+// ── List Property ──────────────────────────────────────
+function renderLP() {
+  return [
+    SEC('Basic info',
+      F('Property title', TXT('lp','title','e.g. 5 bedroom pool villa in Cherngtalay'), true),
+      G2(F('Property type', PILLS('lp','type',TYPES,false), true),
+         F('Status', PILLS('lp','status',STATUSES,true), true)),
+      F('Labels', PILLS('lp','labels',LABELS,true)),
+      F('Area', PILLS('lp','areas',AREAS,true)),
+    ),
+    SEC('Property details',
+      G2(F('Bedrooms', NPILLS('lp','beds',BEDS), true),
+         F('Bathrooms', NPILLS('lp','baths',BATHS), true)),
+      G3(F('Built-up size (sqm)', NUM('lp','size','e.g. 450'), true),
+         F('Land size (sqm)', NUM('lp','land','e.g. 800')),
+         F('Price (THB)', NUM('lp','price','e.g. 45000000'), true)),
+      G3(F('Price prefix', TXT('lp','pricePrefix','e.g. Starting from')),
+         F('Year built', NUM('lp','year','e.g. 2026')),
+         F('Total rooms', NUM('lp','rooms','e.g. 7'))),
+      F('Property ID', TXT('lp','propertyId','e.g. ASA2795'), false, 'max-width:200px'),
+    ),
+    SEC('Location',
+      F('Full address', TXT('lp','address','Soi Pasak 8, Cherngtalay, Thalang District, Phuket 83110')),
+      G2(F('Latitude', TXT('lp','lat','e.g. 7.9974'), true),
+         F('Longitude', TXT('lp','lng','e.g. 98.3205'), true)),
+    ),
+    SEC('Description',
+      F('Property description', TA('lp','description',5,'Full listing description for the website…')),
+    ),
+    FEATS('lp','features'),
+    SEC('Internal',
+      G2(F('Internal note', TXT('lp','note','e.g. Annara 5bed 8% com unit A1')),
+         F('Agent', PILLS('lp','agent',AGENTS,false))),
+      F('Video URL (YouTube)', URL_('lp','videoUrl','https://www.youtube.com/watch?v=...')),
+    ),
+    SEC('Platforms',
+      F('Post to', PILLS('lp','platforms',PLATFORMS,true), true),
+      F('Google Drive link', URL_('lp','driveLink','https://drive.google.com/...')),
+    ),
+    SEC('Media',
+      F('Featured image', FZONE('lp-feat','Upload featured image (JPG / PNG)',false,'image/*'), true),
+      F('Gallery images (up to 10)', FZONE('lp-gal','Upload gallery images',true,'image/*')),
+      F('Floor plans', FZONE('lp-plans','Upload floor plan images or PDFs',true,'image/*,.pdf')),
+      F('PDF documents', FZONE('lp-pdfs','Upload brochures, price lists, legal docs',true,'.pdf')),
+    ),
+    `<div class="btn-row">
+      <button class="btn btn-gold" onclick="submitLP()">Submit listing →</button>
+      <button class="btn btn-outline" onclick="saveDraft()">Save draft</button>
+    </div>`,
+  ].join('');
+}
+
+// ── List Development ───────────────────────────────────
+function renderLD() {
+  const units = S.ld.units.map((u, i) => `
+    <div class="ucard">
+      <div class="ucard-hdr">
+        <span class="ucard-lbl">Unit type ${i+1}</span>
+        ${S.ld.units.length > 1 ? `<button class="ucard-rm" onclick="removeUnit(${i})">×</button>` : ''}
+      </div>
+      ${F('Unit name', `<input type="text" data-ui="${i}" data-uk="name" value="${esc(u.name)}" placeholder="e.g. 3 bedroom pool villa type A">`, true)}
+      ${G2(F('Type', `<div class="pills" data-ui="${i}" data-uk="type" data-multi="false">${TYPES.map(o=>`<button class="pill${u.type===o.id?' on':''}" data-val="${o.id}">${o.l}</button>`).join('')}</div>`),
+           F('Status', `<div class="pills" data-ui="${i}" data-uk="status" data-multi="true">${STATUSES.map(o=>`<button class="pill${(u.status||[]).includes(o.id)?' on':''}" data-val="${o.id}">${o.l}</button>`).join('')}</div>`))}
+      ${G2(F('Beds', `<div class="pills" data-ui="${i}" data-uk="beds" data-multi="false">${BEDS.map(v=>`<button class="pill${u.beds===v?' on':''}" data-val="${v}">${v}</button>`).join('')}</div>`),
+           F('Baths', `<div class="pills" data-ui="${i}" data-uk="baths" data-multi="false">${BATHS.map(v=>`<button class="pill${u.baths===v?' on':''}" data-val="${v}">${v}</button>`).join('')}</div>`))}
+      ${G3(F('Size (sqm)', `<input type="number" data-ui="${i}" data-uk="size" value="${esc(u.size)}" placeholder="450">`, true),
+           F('Price (THB)', `<input type="number" data-ui="${i}" data-uk="price" value="${esc(u.price)}" placeholder="45000000">`, true),
+           F('Price prefix', `<input type="text" data-ui="${i}" data-uk="pricePrefix" value="${esc(u.pricePrefix)}" placeholder="From">`))}
+      ${F('Unit images', FZONE(`ld-img-${i}`,'Upload unit-specific images',true,'image/*'))}
+      ${F('Floor plans', FZONE(`ld-plan-${i}`,'Upload floor plans for this unit (optional)',true,'image/*,.pdf'))}
+    </div>`).join('');
+
+  return [
+    SEC('Development info',
+      F('Development name', TXT('ld','devName','e.g. Annara Residences'), true),
+      F('Full address', TXT('ld','address','Soi Pasak 8, Cherngtalay, Thalang, Phuket')),
+      G2(F('Latitude', TXT('ld','lat','7.9974'), true),
+         F('Longitude', TXT('ld','lng','98.3205'), true)),
+      F('Area', PILLS('ld','areas',AREAS,true)),
+      F('Description', TA('ld','description',3,'Development overview and selling points…')),
+    ),
+    FEATS('ld','features'),
+    `<div class="sec">
+      <div class="stitle">Unit types</div>
+      ${units}
+      <button class="add-unit" onclick="addUnit()">+ Add unit type</button>
+    </div>`,
+    SEC('Platforms & internal',
+      F('Post to', PILLS('ld','platforms',PLATFORMS,true), true),
+      G2(F('Internal note', TXT('ld','note','e.g. 8% commission all units')),
+         F('Google Drive link', URL_('ld','driveLink','https://drive.google.com/...'))),
+      F('Agent', PILLS('ld','agent',AGENTS,false)),
+    ),
+    SEC('Development media',
+      F('Development images (hero shots, renders)', FZONE('ld-devimg','Upload development images',true,'image/*')),
+      F('PDF brochures', FZONE('ld-pdfs','Upload price list, master plan, brochures',true,'.pdf')),
+    ),
+    `<div class="btn-row">
+      <button class="btn btn-gold" onclick="submitLD()">Submit development — ${S.ld.units.length} unit type${S.ld.units.length>1?'s':''} →</button>
+      <button class="btn btn-outline" onclick="saveDraft()">Save draft</button>
+    </div>`,
+  ].join('');
+}
+
+// ── Update Listing ─────────────────────────────────────
+function renderUL() {
+  return [
+    SEC('Target listing',
+      F('WordPress post ID', TXT('ul','postId','e.g. 2795','w200'), true),
+      F('Platforms to update', PILLS('ul','platforms',PLATFORMS,true)),
+    ),
+    SEC('Fields to update',
+      `<div class="info">Leave any field blank to keep its existing value.</div>`,
+      F('New title', TXT('ul.fields','title','Leave blank to keep existing')),
+      G2(F('New price (THB)', NUM('ul.fields','price','Leave blank to keep existing')),
+         F('New status', PILLS('ul.fields','status',STATUSES,true))),
+      F('New description', TA('ul.fields','description',4,'Leave blank to keep existing')),
+      F('New internal note', TXT('ul.fields','note','Leave blank to keep existing')),
+    ),
+    `<div class="btn-row"><button class="btn btn-gold" onclick="submitUL()">Update listing →</button></div>`,
+  ].join('');
+}
+
+// ── Delete Listing ─────────────────────────────────────
+function renderDL() {
+  return [
+    SEC('Listing to delete',
+      F('WordPress post ID', TXT('dl','postId','e.g. 2795','w200'), true),
+      F('Remove from', PILLS('dl','platforms',PLATFORMS,true), true),
+    ),
+    `<div class="warn">⚠ This action cannot be undone. The listing will be permanently removed from all selected platforms.</div>`,
+    `<button class="btn btn-danger" onclick="submitDL()">Delete listing</button>`,
+  ].join('');
+}
+
+// ── View Listings ──────────────────────────────────────
+function renderVL() {
+  const resultsHtml = S.results ? `
+    <div class="sec">
+      <div class="stitle">${S.results.length} listing${S.results.length!==1?'s':''} found</div>
+      ${S.results.map(r => `
+        <div class="ritem">
+          <div>
+            <div class="ritem-ttl">${r.title?.rendered||'—'}</div>
+            <div class="ritem-meta">ID: ${r.id} &nbsp;·&nbsp; ฿${Number((r.property_meta?.fave_property_price?.[0]||'0').replace(/,/g,'')).toLocaleString()}</div>
+          </div>
+          <a href="${r.link}" target="_blank">View →</a>
+        </div>`).join('')}
+    </div>` : '';
+
+  return [
+    SEC('Filters',
+      G2(F('Type', PILLS('vl','type',TYPES,false)),
+         F('Status', PILLS('vl','status',STATUSES,true))),
+      F('Area', PILLS('vl','areas',AREAS,true)),
+      F('Bedrooms', NPILLS('vl','beds',BEDS)),
+    ),
+    `<div class="btn-row">
+      <button class="btn btn-gold" onclick="fetchListings()" ${S.loading?'disabled':''}>
+        ${S.loading?'Fetching…':'Fetch listings →'}
+      </button>
+    </div>`,
+    resultsHtml,
+  ].join('');
+}
+
+// ── Drafts ─────────────────────────────────────────────
+function renderDrafts() {
+  let drafts = [];
+  try { drafts = JSON.parse(localStorage.getItem('am_drafts')||'[]'); } catch(e){}
+  const items = drafts.length
+    ? drafts.map((d,i) => `
+        <div class="ritem">
+          <div>
+            <div class="ritem-ttl">${d.title||'Untitled draft'}</div>
+            <div class="ritem-meta">${d.cmd} &nbsp;·&nbsp; ${d.savedAt}</div>
+          </div>
+          <div style="display:flex;gap:7px">
+            <button class="btn btn-outline" style="font-size:11px;padding:4px 10px" onclick="loadDraft(${i})">Resume</button>
+            <button class="btn btn-outline" style="font-size:11px;padding:4px 10px;color:var(--danger)" onclick="deleteDraft(${i})">Delete</button>
+          </div>
+        </div>`).join('')
+    : `<div style="color:var(--muted);font-size:13px;padding:18px 0">No drafts saved yet.<br>Use the <em>Save draft</em> button on any listing form.</div>`;
+
+  return [
+    SEC('Saved drafts', items),
+    drafts.length ? `<button class="btn btn-outline" onclick="clearDrafts()" style="margin-top:4px">Clear all drafts</button>` : '',
+  ].join('');
+}
+
+// ── Upload Media ───────────────────────────────────────
+function renderUM() {
+  const mt = S.um.mediaType;
+  const mtOpts = [{id:'gallery',l:'Gallery'},{id:'floorplans',l:'Floor plans'},{id:'pdfs',l:'PDFs'},{id:'featured',l:'Featured image'}];
+  return [
+    SEC('Target listing',
+      G2(F('WordPress post ID', TXT('um','postId','e.g. 2795'), true),
+         F('Platform', PILLS('um','platform',PLATFORMS,false))),
+    ),
+    SEC('Media',
+      F('Media type', PILLS('um','mediaType',mtOpts,false)),
+      F('Files', FZONE('um-files', `Upload ${mt==='pdfs'?'PDFs':'images'}`, mt!=='featured', mt==='pdfs'?'.pdf':'image/*'), true),
+    ),
+    `<div class="btn-row"><button class="btn btn-gold" onclick="submitUM()">Upload media →</button></div>`,
+  ].join('');
+}
+
+// ── Scan Brochure ──────────────────────────────────────
+function renderSB() {
+  const extractedHtml = S.extracted ? `
+    <div class="sec">
+      <div class="stitle">Extracted units — ${S.extracted.length} found</div>
+      ${S.extracted.map(u => `
+        <div class="eu">
+          <div class="eu-name">${u.name}</div>
+          <div class="eu-meta">${u.beds} bed · ${u.baths} bath · ${u.size} sqm · ฿${Number(u.price||0).toLocaleString()}</div>
+          <div class="eu-btns">
+            <button class="eu-confirm">✓ Confirm</button>
+            <button class="eu-edit">Edit</button>
+          </div>
+        </div>`).join('')}
+    </div>` : '';
+
+  return [
+    `<div class="info">Upload a developer PDF brochure. The AI in n8n will extract all unit types, sizes, and prices — then you review and confirm before anything is posted.</div>`,
+    SEC('Brochure',
+      F('Developer PDF brochure', FZONE('sb-pdf','Upload developer brochure or price list (.pdf)',false,'.pdf'), true),
+      F('Post to platforms', PILLS('sb','platforms',PLATFORMS,true)),
+      G2(F('Internal note', TXT('sb','note','e.g. 8% commission all units')),
+         F('Google Drive link', URL_('sb','driveLink','https://drive.google.com/...'))),
+    ),
+    `<div class="btn-row">
+      <button class="btn btn-gold" onclick="submitSB()" ${S.loading?'disabled':''}>
+        ${S.loading?'Scanning…':'Scan with AI →'}
+      </button>
+    </div>`,
+    extractedHtml,
+  ].join('');
+}
+
+// ── Settings ───────────────────────────────────────────
+function renderSettings() {
+  return [
+    `<div class="settings-hdr">
+      <div>
+        <div style="font-size:10px;letter-spacing:.15em;color:var(--gold);text-transform:uppercase;font-weight:600;margin-bottom:4px;font-family:'Helvetica Neue',sans-serif">Configuration</div>
+        <div style="font-size:20px;font-weight:normal;letter-spacing:.02em">Webhook URLs</div>
+      </div>
+      <button class="btn btn-outline" onclick="go(S.cmd)">← Back</button>
+    </div>`,
+    `<div class="settings-note">In n8n, create an <strong>HTTP Webhook trigger</strong> node for each command. Copy the production URL and paste it below. Each form submission will POST all field data as JSON to that URL.</div>`,
+    ...COMMANDS.map(c => F(`/${c.id} — ${c.desc}`,
+      `<input type="text" data-wh="${c.id}" value="${esc(S.webhooks[c.id]||'')}" placeholder="https://your-n8n.com/webhook/${c.id}">`
+    )),
+    `<div class="btn-row">
+      <button class="btn btn-gold" onclick="saveSettings()">Save configuration</button>
+      <button class="btn btn-outline" onclick="go(S.cmd)">Cancel</button>
+    </div>`,
+  ].join('');
+}
+
+/* ═══════════════════════════════════════════════════════
+   RENDER ENGINE
+═══════════════════════════════════════════════════════ */
+const RENDERERS = {
+  listproperty: renderLP, listdevelopment: renderLD,
+  updatelisting: renderUL, deletelisting: renderDL,
+  viewlistings: renderVL, drafts: renderDrafts,
+  uploadmedia: renderUM, scanbrochure: renderSB,
+};
+
+function render() {
+  // Sidebar
+  document.getElementById('sb-nav').innerHTML = COMMANDS.map(c =>
+    `<button class="nbtn${S.cmd===c.id&&!S.settings?' on':''}" onclick="go('${c.id}')">
+      <div class="nl">${c.label}</div>
+      <div class="nd">${c.desc}</div>
+    </button>`).join('');
+  document.getElementById('settings-btn').className = 'nbtn' + (S.settings?' on':'');
+
+  // Header
+  if (S.settings) {
+    document.getElementById('mhdr').innerHTML = `
+      <div class="cmd">configuration</div>
+      <div class="ttl">Settings</div>
+      <div class="dsc">Webhook URLs for each command</div>`;
+  } else {
+    const cur = COMMANDS.find(c=>c.id===S.cmd);
+    document.getElementById('mhdr').innerHTML = `
+      <div class="cmd">/${S.cmd}</div>
+      <div class="ttl">${cur.label}</div>
+      <div class="dsc">${cur.desc}</div>`;
+  }
+
+  // Form content
+  document.getElementById('fcnt').innerHTML = S.settings ? renderSettings() : RENDERERS[S.cmd]();
+}
+
+function go(cmd) {
+  S.cmd = cmd; S.settings = false; S.results = null;
+  render();
+  document.getElementById('fcnt').scrollTop = 0;
+}
+
+function goSettings() { S.settings = true; render(); }
+
+function saveSettings() {
+  document.querySelectorAll('[data-wh]').forEach(el => { S.webhooks[el.dataset.wh] = el.value.trim(); });
+  toast('Settings saved');
+  go(S.cmd);
+}
+
+/* ═══════════════════════════════════════════════════════
+   EVENT DELEGATION — pills + inputs
+═══════════════════════════════════════════════════════ */
+document.addEventListener('click', e => {
+  const pill = e.target.closest('.pill');
+  if (!pill) return;
+  const container = pill.closest('.pills');
+  if (!container) return;
+
+  // Unit pills (inside listdevelopment)
+  if (container.dataset.ui !== undefined) {
+    const ui = +container.dataset.ui;
+    const uk = container.dataset.uk;
+    const multi = container.dataset.multi === 'true';
+    const raw = pill.dataset.val;
+    const val = isNaN(raw) ? raw : +raw;
+    const u = S.ld.units[ui];
+    if (!u) return;
+    if (multi) {
+      const arr = u[uk] || [];
+      u[uk] = arr.includes(val) ? arr.filter(x=>x!==val) : [...arr, val];
+      pill.classList.toggle('on', u[uk].includes(val));
+    } else {
+      if (u[uk] === val) {
+        u[uk] = null; pill.classList.remove('on');
+      } else {
+        container.querySelectorAll('.pill.on').forEach(p=>p.classList.remove('on'));
+        u[uk] = val; pill.classList.add('on');
+      }
+    }
+    return;
+  }
+
+  // Regular form pills
+  const fp = container.dataset.fp;
+  const fk = container.dataset.fk;
+  const multi = container.dataset.multi === 'true';
+  if (!fp || !fk) return;
+
+  const obj = fp.split('.').reduce((o,k) => o&&o[k]!==undefined?o[k]:null, S);
+  if (!obj) return;
+
+  const raw = pill.dataset.val;
+  const val = isNaN(raw) ? raw : +raw;
+
+  if (multi) {
+    const arr = obj[fk] || [];
+    obj[fk] = arr.includes(val) ? arr.filter(x=>x!==val) : [...arr, val];
+    pill.classList.toggle('on', obj[fk].includes(val));
+  } else {
+    if (obj[fk] === val) {
+      obj[fk] = null; pill.classList.remove('on');
+    } else {
+      container.querySelectorAll('.pill.on').forEach(p=>p.classList.remove('on'));
+      obj[fk] = val; pill.classList.add('on');
+    }
+  }
+
+  // Re-render upload media if mediaType pill changed (to update file zone accept type)
+  if (fp === 'um' && fk === 'mediaType') render();
+});
+
+document.addEventListener('input', e => {
+  const el = e.target;
+
+  // Unit inputs
+  if (el.dataset.ui !== undefined && el.dataset.uk) {
+    const ui = +el.dataset.ui;
+    if (S.ld.units[ui]) S.ld.units[ui][el.dataset.uk] = el.value;
+    return;
+  }
+
+  // Regular form inputs (skip webhook inputs — handled on save)
+  const fp = el.dataset.fp;
+  const fk = el.dataset.fk;
+  if (!fp || !fk) return;
+  const obj = fp.split('.').reduce((o,k) => o&&o[k]!==undefined?o[k]:null, S);
+  if (obj) obj[fk] = el.value;
+});
+
+/* ═══════════════════════════════════════════════════════
+   FILE HANDLING
+═══════════════════════════════════════════════════════ */
+function trigFile(id) { document.getElementById('fi-' + id).click(); }
+
+function onFiles(id, fileList) {
+  S.files[id] = Array.from(fileList);
+  const zone = document.querySelector(`.fzone[data-fz="${id}"]`);
+  if (!zone) return;
+  const f = S.files[id];
+  zone.classList.toggle('ok', f.length > 0);
+  zone.querySelector('.fzone-txt').textContent = f.length > 0
+    ? `${f.length} file${f.length>1?'s':''} — ${f.map(x=>x.name).join(', ')}`
+    : `↑  Upload`;
+}
+
+function readFilesB64(files) {
+  return Promise.all(Array.from(files||[]).map(f => new Promise(res => {
+    const r = new FileReader();
+    r.onload = () => res({ name: f.name, type: f.type, data: r.result });
+    r.readAsDataURL(f);
+  })));
+}
+
+/* ═══════════════════════════════════════════════════════
+   UNIT MANAGEMENT
+═══════════════════════════════════════════════════════ */
+function addUnit()    { S.ld.units.push(blankUnit()); render(); }
+function removeUnit(i){ S.ld.units.splice(i,1); render(); }
+
+/* ═══════════════════════════════════════════════════════
+   DRAFT MANAGEMENT
+═══════════════════════════════════════════════════════ */
+function saveDraft() {
+  let drafts = [];
+  try { drafts = JSON.parse(localStorage.getItem('am_drafts')||'[]'); } catch(e){}
+  const form = S[S.cmd.substring(0,2)] || {};
+  drafts.unshift({
+    cmd: S.cmd,
+    title: form.title || form.devName || `Draft`,
+    savedAt: new Date().toLocaleString(),
+    data: JSON.parse(JSON.stringify(form)),
+  });
+  localStorage.setItem('am_drafts', JSON.stringify(drafts.slice(0,20)));
+  toast('Draft saved');
+}
+
+function loadDraft(i) {
+  let drafts = [];
+  try { drafts = JSON.parse(localStorage.getItem('am_drafts')||'[]'); } catch(e){}
+  if (!drafts[i]) return;
+  const d = drafts[i];
+  const key = d.cmd.substring(0,2);
+  if (S[key]) Object.assign(S[key], d.data);
+  go(d.cmd);
+}
+
+function deleteDraft(i) {
+  let drafts = [];
+  try { drafts = JSON.parse(localStorage.getItem('am_drafts')||'[]'); } catch(e){}
+  drafts.splice(i, 1);
+  localStorage.setItem('am_drafts', JSON.stringify(drafts));
+  render();
+}
+
+function clearDrafts() {
+  if (confirm('Clear all saved drafts?')) {
+    localStorage.removeItem('am_drafts');
+    render();
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   TOAST
+═══════════════════════════════════════════════════════ */
+function toast(msg, err=false) {
+  const el = document.getElementById('toast');
+  el.textContent = (err ? '✕  ' : '✓  ') + msg;
+  el.style.background = err ? 'var(--danger)' : 'var(--success)';
+  el.style.color = '#fff';
+  el.style.display = 'block';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.style.display = 'none', 3500);
+}
+
+/* ═══════════════════════════════════════════════════════
+   WEBHOOK POSTING
+═══════════════════════════════════════════════════════ */
+async function post(cmd, payload) {
+  const url = S.webhooks[cmd];
+  if (!url) {
+    toast(`No webhook set for /${cmd} — go to Settings`, true);
+    return false;
+  }
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return true;
+}
+
+/* ═══════════════════════════════════════════════════════
+   SUBMIT HANDLERS
+═══════════════════════════════════════════════════════ */
+async function submitLP() {
+  const d = S.lp;
+  if (!d.title || !d.type || !d.status.length || !d.platforms.length) {
+    toast('Title, type, status and at least one platform are required', true); return;
+  }
+  try {
+    const payload = {
+      ...d,
+      featuredImage: await readFilesB64(S.files['lp-feat']),
+      gallery:       await readFilesB64(S.files['lp-gal']),
+      floorPlans:    await readFilesB64(S.files['lp-plans']),
+      pdfs:          await readFilesB64(S.files['lp-pdfs']),
+    };
+    if (await post('listproperty', payload)) toast('Listing submitted successfully');
+  } catch(e) { toast('Error: ' + e.message, true); }
+}
+
+async function submitLD() {
+  if (!S.ld.devName || !S.ld.platforms.length) {
+    toast('Development name and at least one platform required', true); return;
+  }
+  try {
+    if (await post('listdevelopment', S.ld))
+      toast(`Development submitted — ${S.ld.units.length} unit type${S.ld.units.length>1?'s':''}`);
+  } catch(e) { toast('Error: ' + e.message, true); }
+}
+
+async function submitUL() {
+  if (!S.ul.postId) { toast('Post ID required', true); return; }
+  try {
+    if (await post('updatelisting', S.ul)) toast('Listing updated');
+  } catch(e) { toast('Error: ' + e.message, true); }
+}
+
+async function submitDL() {
+  if (!S.dl.postId || !S.dl.platforms.length) {
+    toast('Post ID and at least one platform required', true); return;
+  }
+  if (!confirm(`Delete listing ${S.dl.postId} from: ${S.dl.platforms.join(', ')}?\nThis cannot be undone.`)) return;
+  try {
+    if (await post('deletelisting', S.dl)) {
+      toast('Listing deleted');
+      S.dl = { postId:'', platforms:[] };
+      render();
+    }
+  } catch(e) { toast('Error: ' + e.message, true); }
+}
+
+async function fetchListings() {
+  S.loading = true; render();
+  try {
+    let data;
+    const url = S.webhooks['viewlistings'];
+    if (url) {
+      const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(S.vl) });
+      data = await r.json();
+    } else {
+      const r = await fetch('https://www.asamarsh.com/wp-json/wp/v2/property?per_page=20&status=publish');
+      data = await r.json();
+    }
+    S.results = data;
+  } catch(e) { toast('Error: ' + e.message, true); }
+  S.loading = false; render();
+}
+
+async function submitUM() {
+  if (!S.um.postId || !(S.files['um-files']||[]).length) {
+    toast('Post ID and at least one file required', true); return;
+  }
+  try {
+    const payload = { ...S.um, files: await readFilesB64(S.files['um-files']) };
+    if (await post('uploadmedia', payload)) {
+      toast('Media uploaded');
+      S.files['um-files'] = [];
+      S.um.postId = '';
+      render();
+    }
+  } catch(e) { toast('Error: ' + e.message, true); }
+}
+
+async function submitSB() {
+  if (!(S.files['sb-pdf']||[]).length) { toast('Please upload a PDF brochure', true); return; }
+  S.loading = true; render();
+  try {
+    const pdfData = await readFilesB64(S.files['sb-pdf']);
+    const payload = { ...S.sb, pdf: pdfData[0] };
+    const url = S.webhooks['scanbrochure'];
+    if (url) {
+      const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+      const data = await r.json();
+      S.extracted = data.units || [];
+    } else {
+      S.extracted = [{ name:'Demo unit — connect n8n webhook to enable AI extraction', beds:'3', baths:'3', size:'450', price:'45000000' }];
+    }
+    toast('Brochure scanned — review extracted units below');
+  } catch(e) { toast('Error: ' + e.message, true); }
+  S.loading = false; render();
+}
+
+/* ═══════════════════════════════════════════════════════
+   PASSWORD GATE
+═══════════════════════════════════════════════════════ */
+const APP_PW = 'easylife';
+
+function checkPassword() {
+  const val = document.getElementById('pw-input').value;
+  if (val === APP_PW) {
+    sessionStorage.setItem('lm_auth', '1');
+    unlockApp();
+  } else {
+    const err = document.getElementById('pw-error');
+    err.style.display = 'block';
+    document.getElementById('pw-input').value = '';
+    document.getElementById('pw-input').focus();
+  }
+}
+
+document.getElementById('pw-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') checkPassword();
+});
+
+function unlockApp() {
+  document.getElementById('pw-screen').style.display = 'none';
+  document.getElementById('app-root').style.display = '';
+  render();
+}
+
+/* ═══════════════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════════════ */
+if (sessionStorage.getItem('lm_auth') === '1') {
+  unlockApp();
+}
+</script>
+</body>
+</html>
