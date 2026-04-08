@@ -1119,11 +1119,36 @@ async function post(cmd, payload) {
    SUBMIT HANDLERS
 ═══════════════════════════════════════════════════════ */
 
-/* ═══════════════════════════════════════════════════════
-   SUBMIT HANDLERS
-═══════════════════════════════════════════════════════ */
+// Compress and convert image to base64
+async function compressToB64(file, maxWidth=1600, quality=0.82) {
+  return new Promise(res => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let w = img.width, h = img.height;
+        if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        res({ name: file.name, type: 'image/jpeg', data: canvas.toDataURL('image/jpeg', quality) });
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
-// Single submission — all text + all images in one FormData POST
+// Convert PDF/non-image to base64 without compression
+async function toB64(file) {
+  return new Promise(res => {
+    const r = new FileReader();
+    r.onload = () => res({ name: file.name, type: file.type, data: r.result });
+    r.readAsDataURL(file);
+  });
+}
+
+// Single submission — JSON with compressed base64 images
 async function submitLP() {
   const d = S.lp;
   if (!d.title || !d.type || !d.status.length || !d.platforms.length) {
@@ -1132,33 +1157,45 @@ async function submitLP() {
   const url = S.webhooks['listing'];
   if (!url) { toast('No webhook set — go to Settings', true); return; }
 
-  // Show spinner
   S.lpWaiting = true; render();
 
   setTimeout(async () => {
     try {
-      const form = new FormData();
-
-      // All text fields as JSON
-      form.append('data', JSON.stringify(d));
-
-      // Images as binary — no base64, no memory crash
       const feat  = S.files['lp-feat']  || [];
       const gal   = S.files['lp-gal']   || [];
       const plans = S.files['lp-plans'] || [];
       const pdfs  = S.files['lp-pdfs']  || [];
 
-      if (feat[0]) form.append('featuredImage', feat[0]);
-      gal.slice(0,10).forEach((f,i)  => form.append(`gallery_${i}`,   f));
-      plans.slice(0,5).forEach((f,i) => form.append(`floorPlan_${i}`, f));
-      pdfs.slice(0,5).forEach((f,i)  => form.append(`pdf_${i}`,       f));
+      toast('Compressing images…');
 
-      const r = await fetch(url, { method:'POST', body: form });
+      // Compress images one at a time — avoids memory spike
+      const featB64  = feat[0]  ? await compressToB64(feat[0]) : null;
+      const galB64   = [];
+      for (const f of gal.slice(0,10))   galB64.push(await compressToB64(f));
+      const planB64  = [];
+      for (const f of plans.slice(0,5))  planB64.push(await compressToB64(f));
+      const pdfB64   = [];
+      for (const f of pdfs.slice(0,5))   pdfB64.push(await toB64(f));
+
+      const payload = {
+        ...d,
+        featuredImage: featB64,
+        gallery:       galB64,
+        floorPlans:    planB64,
+        pdfs:          pdfB64,
+      };
+
+      toast('Submitting listing…');
+
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
 
       toast('Listing submitted successfully!');
 
-      // Reset
       S.lp = { title:'', type:null, status:[], labels:[], areas:[], beds:null, baths:null,
         size:'', land:'', price:'', pricePrefix:'', rooms:'', year:'', propertyId:'',
         address:'', lat:'', lng:'', description:'', features:[], note:'', agent:2461,
